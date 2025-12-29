@@ -1,22 +1,21 @@
-print("【调试】程序已经开始运行")
+print("【调试】程序已经开始运行（Playwright）")
 
+import os
 import time
 import hmac
 import hashlib
 import base64
 import urllib.parse
 import requests
-import os
-import re
+
+from playwright.sync_api import sync_playwright
 
 # ===== 钉钉机器人配置（从 GitHub Secrets 读取）=====
 DINGTALK_WEBHOOK = os.environ["DINGTALK_WEBHOOK"]
 DINGTALK_SECRET = os.environ["DINGTALK_SECRET"]
 
-# ===== RedFlagDeals 热帖页面（HTML）=====
 URL = "https://forums.redflagdeals.com/hot-deals-f9/"
 
-# ===== 去重文件 =====
 HISTORY_FILE = "sent.txt"
 
 
@@ -63,31 +62,36 @@ def save_sent(link):
         f.write(link + "\n")
 
 
-# ===== 主程序 =====
 sent = load_sent()
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
 
-resp = requests.get(URL, headers=headers, timeout=20)
-html = resp.text
+    print("打开页面中…")
+    page.goto(URL, timeout=60000)
 
-matches = re.findall(
-    r'<a[^>]+class="topic_title_link[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
-    html,
-    re.S
-)
+    # 等帖子标题出现（关键）
+    page.wait_for_selector("a.topic_title_link", timeout=60000)
 
-print("抓到的 Deal 数量 =", len(matches))
+    links = page.query_selector_all("a.topic_title_link")
 
-for link, title in matches:
-    title = re.sub("<.*?>", "", title).strip()
-    full_link = "https://forums.redflagdeals.com" + link
+    print("抓到的 Deal 数量 =", len(links))
 
-    if full_link in sent:
-        continue
+    for a in links:
+        title = a.inner_text().strip()
+        href = a.get_attribute("href")
 
-    send_dingtalk(title, full_link)
-    save_sent(full_link)
-    time.sleep(1)
+        if not href:
+            continue
+
+        full_link = "https://forums.redflagdeals.com" + href
+
+        if full_link in sent:
+            continue
+
+        send_dingtalk(title, full_link)
+        save_sent(full_link)
+        time.sleep(1)
+
+    browser.close()
