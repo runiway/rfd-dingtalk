@@ -1,9 +1,9 @@
-name: Run RedFlagDeals to DingTalk
+name: Run RedFlagDeals to DingTalk (Playwright)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"   # 每 30 分钟运行一次
+    - cron: "*/30 * * * *"
 
 jobs:
   run:
@@ -21,6 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          playwright install chromium
 
       - name: Run script
         env:
